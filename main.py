@@ -1,9 +1,17 @@
 import yfinance as yahooFinance
 import mysql.connector
 from numerize import numerize
+from datetime import date, timedelta
+import math
 
-#split addCompany into a list of tuples
-#required to manipulate the data
+def getToday():
+    today = str(date.today())
+    return today
+def getYesterday(n):
+    yesterday = str(date.today() - timedelta(days=n))
+    return yesterday
+
+# split addCompany into a list of tuples | required to manipulate the data
 def getCompanyData(addCompany):
     addCompany = str(addCompany)
     addCompany = addCompany.replace("(", "")
@@ -16,7 +24,7 @@ def getCompanyData(addCompany):
     return addCompany
     # print(addCompany[0])
 
-#make a functions that executes the sql query
+# functions that executes the sql query
 def fetchNewCompanies(addCompany):
     cursor.execute("SELECT * FROM newcompany")
     addCompany = cursor.fetchall()
@@ -27,7 +35,7 @@ def fetchCompany(addCompany):
     addCompany = cursor.fetchall()
     return addCompany
 
-#make a function that deletes the nth element in the database newcompany
+# function that deletes the nth element in the database newcompany
 def deleteNewCompany(addCompany, n):
     cursor.execute("DELETE FROM newcompany WHERE Ticker = %s", (addCompany[n],))
     db.commit()
@@ -48,6 +56,7 @@ def ifnTableDelete(addCompany, holdCompanies):
     return addCompany    
 
 
+
 # Connect to the database
 db = mysql.connector.connect(
     host="localhost",
@@ -56,25 +65,20 @@ db = mysql.connector.connect(
     database="swingtraderdb"
 )
 cursor = db.cursor()
-#alter table company auto_increment = 1;
 cursor.execute("ALTER TABLE company AUTO_INCREMENT = 1")
-#get data from newcompany table
 cursor.execute("SELECT * FROM newcompany")
 addCompany = cursor.fetchall()
-
-#get data from company table
 cursor.execute("SELECT * FROM company")
 holdCompanies = cursor.fetchall()
 
-#convert addCompany to a list of tuples
 addCompany = fetchNewCompanies(addCompany)
 print(addCompany)
 
-#if addCompany[n] is in the 3rd element of holdCompanies, delete it from addCompany
+# if addCompany[n] is in the 3rd element (ticker) of holdCompanies, delete it from addCompany
 addCompany = ifnTableDelete(addCompany, holdCompanies)
 addCompany = fetchNewCompanies(addCompany)
 
-#check if addCompany is empty or not and if it is not empty, add it to the company table and delete it from the newcompany table
+# check if addCompany is empty or not and if it is not empty, add it to the company table and delete it from the newcompany table
 if len(addCompany) != 0:
     for n in range(len(addCompany)):
         data = yahooFinance.Ticker(addCompany[n])
@@ -87,27 +91,87 @@ if len(addCompany) != 0:
         print(data.info['longName'], "record inserted.")
 
 addCompany = fetchNewCompanies(addCompany)
-print(addCompany)
+# print(addCompany)
 
 holdCompanies = fetchCompany(holdCompanies)
-
+print(holdCompanies)
 
 # cursor.execute("CREATE TABLE stockdata (id INT AUTO_INCREMENT PRIMARY KEY, symbol VARCHAR(10) NOT NULL, date DATETIME NOT NULL, open FLOAT NOT NULL, close FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, volume INT NOT NULL, dividends FLOAT(4,3) NOT NULL, stocksplit INT(3) NOT NULL)")
 # db.commit()
 
+#delete all itemss from the stockdata table
+# cursor.execute("DELETE FROM stockdata")
+# db.commit()
+# print("stockdata table cleared")
+cursor.execute("ALTER TABLE stockdata AUTO_INCREMENT = 1")
 
-#insert data into stockdata table
-# for n in range(len(holdCompanies)):
-#     ticker = yahooFinance.Ticker(holdCompanies[n][2])
-#     data = ticker.history(start="2021-12-15", end="2021-12-25")
-#     for i in range(len(data)):
-#         cursor.execute("INSERT INTO stockdata (symbol, date, open, close, high, low, volume, dividends, stocksplit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (holdCompanies[n][2], data.index[i], data['Open'][i], data['Close'][i], data['High'][i], data['Low'][i], int(data['Volume'][i]), float(data['Dividends'][i]), int(data['Stock Splits'][i])))
-#         db.commit()
-#         print(data.index[1], "record inserted.")
+today = getToday()
+yesterday = getYesterday(90)
 
-
-
+#insert data into stockdata table if data is not in the table check if data['Open'] is not nan and if it is not nan, insert data into the table
+for n in range(len(holdCompanies)):
+    ticker = yahooFinance.Ticker(holdCompanies[n][2])
+    data = ticker.history(start=yesterday, end=today)
+    for i in range(len(data)):
+        cursor.execute("SELECT * FROM stockdata WHERE symbol = %s AND date = %s", (holdCompanies[n][2], data.index[i]))
+        check = cursor.fetchall()
+        validData = math.isnan(data['Open'][i])
+        if len(check) == 0 and validData == False:
+            # print(holdCompanies[n][2] + " " + str(data.index[i]) + str(data['Open'][i]) + " " + str(data['Close'][i]) + " " + str(data['High'][i]) + " " + str(data['Low'][i]) + " " + str(data['Volume'][i]) + " " + str(data['Dividends'][i]) + " " + str(data['Stock Splits'][i]))
+            cursor.execute("INSERT INTO stockdata (symbol, date, open, close, high, low, volume, dividends, stocksplit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (holdCompanies[n][2], data.index[i], data['Open'][i], data['Close'][i], data['High'][i], data['Low'][i], int(data['Volume'][i]), float(data['Dividends'][i]), int(data['Stock Splits'][i])))
+            db.commit()
+            print(holdCompanies[n][2] + " " + str(data.index[i].strftime('%Y-%m-%d')) + " record inserted.")
+        else:
+            if validData == True:
+                print("data is " + str(not validData))
+            else:
+                print(holdCompanies[n][2], "record already in table.")
 
 #close the connection
 cursor.close()
 db.close()
+
+
+
+
+
+
+
+
+
+
+
+
+#db stuct
+
+# CREATE TABLE `company` (
+#   `ID` int unsigned NOT NULL AUTO_INCREMENT,
+#   `Name` varchar(100) NOT NULL,
+#   `Ticker` varchar(50) NOT NULL,
+#   `MarketCap` varchar(25) DEFAULT NULL,
+#   `Flag` tinyint unsigned NOT NULL,
+#   UNIQUE KEY `Name` (`Name`),
+#   UNIQUE KEY `Ticker` (`Ticker`),
+#   UNIQUE KEY `ID` (`ID`)
+# ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+# CREATE TABLE `newcompany` (
+#   `Ticker` varchar(50) NOT NULL,
+#   UNIQUE KEY `Ticker` (`Ticker`)
+# ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+# CREATE TABLE `stockdata` (
+#   `id` int NOT NULL AUTO_INCREMENT,
+#   `symbol` varchar(10) NOT NULL,
+#   `date` datetime NOT NULL,
+#   `open` float NOT NULL,
+#   `close` float NOT NULL,
+#   `high` float NOT NULL,
+#   `low` float NOT NULL,
+#   `volume` int NOT NULL,
+#   `dividends` float(4,3) NOT NULL,
+#   `stocksplit` int NOT NULL,
+#   PRIMARY KEY (`id`)
+# ) ENGINE=InnoDB AUTO_INCREMENT=550 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
