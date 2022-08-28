@@ -30,6 +30,11 @@ def fetchNewCompanies(addCompany):
     addCompany = cursor.fetchall()
     return getCompanyData(addCompany)
 
+def fetchHoldCompanies():
+    cursor.execute("SELECT * FROM company")
+    holdCompanies = cursor.fetchall()
+    return holdCompanies
+
 def fetchCompany(addCompany):
     cursor.execute("SELECT * FROM company")
     addCompany = cursor.fetchall()
@@ -40,20 +45,39 @@ def deleteNewCompany(addCompany, n):
     cursor.execute("DELETE FROM newcompany WHERE Ticker = %s", (addCompany[n],))
     db.commit()
 
-# function if addCompany[n] is in the 3rd element of holdCompanies, delete it from addCompany
+# function add addCompany to the database company if it is valid and not already in the database
 def ifnTableDelete(addCompany, holdCompanies):
     for n in range(len(addCompany)):
-        for i in range(len(holdCompanies)):
-            if addCompany[n] == holdCompanies[i][2]:
-                print(addCompany[n] + " Already in table")
-                deleteNewCompany(addCompany, n)
-    addCompany = fetchNewCompanies(addCompany)
-    for n in range(len(addCompany)):
+        addCompany = fetchNewCompanies(addCompany)
+        holdCompanies = fetchHoldCompanies()
+        print("\n1 =", n)
         data = yahooFinance.Ticker(addCompany[n])
+        print("\n", data.info['shortName'])
+        print("\n", data.info['marketCap'])
+        cap = None
+        if data.info['marketCap'] != None:
+            cap = data.info['marketCap']
+            cap = numerize.numerize(cap)
+        print(cap) 
         if data.info['longName'] == None:
             print(addCompany[n] + " is not a valid ticker")
-            deleteNewCompany(addCompany, n)
-    return addCompany    
+        else:
+            print(addCompany[n] + " is a valid ticker")
+            insideDB = False
+            if len(holdCompanies) > 0:
+                for i in range(len(holdCompanies)):
+                    if addCompany[n] == holdCompanies[i][2]:
+                        print(addCompany[n] + " Already in table")
+                        insideDB = True
+                        break
+            if insideDB == False:
+                print(addCompany[n] + " added to table")
+                cursor.execute("INSERT INTO company (name, ticker, marketCap, flag) VALUES (%s, %s, %s, %s)", (data.info['longName'], data.info['symbol'], cap, 0))
+                db.commit()
+    #delete all items in newcompany table
+    cursor.execute("DELETE FROM newcompany")
+    db.commit()
+    return fetchNewCompanies(addCompany)    
 
 
 
@@ -78,20 +102,7 @@ print(addCompany)
 addCompany = ifnTableDelete(addCompany, holdCompanies)
 addCompany = fetchNewCompanies(addCompany)
 
-# check if addCompany is empty or not and if it is not empty, add it to the company table and delete it from the newcompany table
-if len(addCompany) != 0:
-    for n in range(len(addCompany)):
-        data = yahooFinance.Ticker(addCompany[n])
-        print(data.info['longName'])
-        cap = numerize.numerize(data.info['marketCap'])
-        print(cap)
-        cursor.execute("INSERT INTO company (name, ticker, marketCap, flag) VALUES (%s, %s, %s, %s)", (data.info['longName'], data.info['symbol'], cap, 0))
-        db.commit()
-        deleteNewCompany(addCompany, n)
-        print(data.info['longName'], "record inserted.")
 
-addCompany = fetchNewCompanies(addCompany)
-# print(addCompany)
 
 holdCompanies = fetchCompany(holdCompanies)
 print(holdCompanies)
@@ -125,7 +136,8 @@ for n in range(len(holdCompanies)):
             if validData == True:
                 print("data is " + str(not validData))
             else:
-                print(holdCompanies[n][2], "record already in table.")
+                print(holdCompanies[n][2] + " " + str(data.index[i].strftime('%Y-%m-%d')) + " already in table")
+
 
 #close the connection
 cursor.close()
